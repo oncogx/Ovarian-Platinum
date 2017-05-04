@@ -1,0 +1,4 @@
+command used:
+awk -F$'\t' 'NR==FNR{icgc[$1]; next} ($80 in icgc)' RNA/clinical_specimen_ids.txt release_may2016.v1.4.tsv > RNA/match_release.tsv
+awk -F$'\t' 'NR==FNR{icgc[$1]; next} ($4 in icgc)' clinical_specimen_ids.txt rnaseq_metadata.tsv > match
+

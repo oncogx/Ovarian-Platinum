@@ -1,0 +1,150 @@
+---
+title: "Aggregate _v2"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+```{r}
+library(cellrangerRkit)
+```
+
+
+```{r}
+gbmAgg_path<-"/Volumes/oncogxA/Projects/CPTRES/RNAExpression/10x/10x_170206/CPTRES_agg"
+gbmAgg<-load_cellranger_matrix(gbmAgg_path)
+gbmAgg_results<-load_cellranger_analysis_results(gbmAgg_path)
+```
+
+
+```{r}
+use_genes <- get_nonzero_genes(gbmAgg)
+gbmAgg_bcnorm <- normalize_barcode_sums_to_median(gbmAgg[use_genes,])
+gbmAgg_log <- log_gene_bc_matrix(gbmAgg_bcnorm,base=10)
+print(dim(gbmAgg_log))
+
+tsne_proj<-gbmAgg_results$tsne
+
+genes<-c("ANXA3","BASP1","SPP1","SFTA1P","EMP2","DPYSL4", "IGF2","SPDL1","S100A16")
+visualize_gene_markers(gbmAgg_log,genes,tsne_proj[c("TSNE.1","TSNE.2")],limits=c(0,1.5))
+```
+
+
+
+Adding the sample barcode to GBM results. Had to come up with a custom function as there is nothing included in the package. 
+```{r fig.height=4, fig.width=4}
+library(dplyr)
+library(tidyr)
+samples<-data.frame(sample_id=c("CAOV3","PARENT","RES-06","RES-14","SENS-02","SENS-03"),sample_N=as.character(seq(1,6,1)))
+tsne_proj_plus<-left_join(separate(gbmAgg_results$tsne, Barcode, c("bc","sample_N"),sep="-",remove=FALSE),samples)
+
+tsne_proj_plus$sample_id<-factor(tsne_proj_plus$sample_id,levels=c("CAOV3","PARENT","SENS-02","SENS-03","RES-06","RES-14"))
+
+library(ggplot2)
+ggplot(tsne_proj_plus,aes(TSNE.1,TSNE.2,col=sample_id))+geom_point(alpha=0.2)+scale_color_manual(values=c("grey","grey","green","green","blue","red"))
+
+ ggplot(tsne_proj_plus,aes(TSNE.1,TSNE.2))+geom_point(alpha=0.1)
+
+# tmp<-select(tsne_proj_plus,-sample_id)
+# ggplot(tmp,aes(TSNE.1,TSNE.2))+geom_point(alpha=0.2,col="grey")+geom_point(data=tsne_proj_plus,aes(TSNE.1,TSNE.2,col=sample_id),alpha=0.1)+facet_wrap(~sample_id)
+
+#visualize_clusters(t(tsne_proj_plus$sample_id),tsne_proj_plus[c("TSNE.1","TSNE.2")])
+```
+
+
+```{r fig.height=4, fig.width=6}
+
+ggplot(tsne_proj_plus,aes(sample_id,fill=sample_id))+geom_bar()+
+  ylab("Number of cells")+xlab("")+coord_flip()
+# 
+```
+
+
+As one can see the main cluster corresponds to untreated samples, while the resistant clones are separate. Furthermore, clone Res-06 seems to have two distinct sub-groups, while Res14 is more homogeneous. Finally, within the main cluster, one can ibserve that sens03 is less uniformaly represented acorss the cluster, maybw suggesting a certain level of cellular heteroegeneity within the population. In contrast the parental clone is more homogenous. It would be nice to come up with a measure of samples homogeneity, given a sepicific clutsering results.
+
+Some of the next experiment could include Res14 and 06 at elarier stage of the treatment cycles to see if they fit in an intermediate groups. More replicate of the current sampels could also help detemrine the robsustenss of the results. 
+
+Interestingly, from the multisample level, the resistant clones seem relatively homoegeneous. Or rather, if they cotnain cells in multiple state, none of these states overlap wih the states form the untreated or parental cells. Thus our hypothesis may need to be revised: It is not yet clear that a resistnt clone contains both senstivie and resistant cells, but rather all cells move to a different state. 
+
+
+# Clone 6
+
+Adding some custom gene plots
+```{r}
+clusterDiffExp<-read.delim("/Volumes/oncogxA/Projects/CPTRES/RNAExpression/10x/10x_170206/CPTRES_agg/outs/analysis/diffexp/graphclust/differential_expression.csv",header=TRUE,sep=",")
+
+
+tmp<-filter(clusterDiffExp,Cluster.5.Mean.UMI.Counts>0.01,Cluster.5.Adjusted.p.value<0.01)
+
+#plotting cluster 5 genes
+genes<-c("ZNF502","NR2F1-AS1","S100A16","CTD-2263F21.1","SFTA1P","PRDM1")
+visualize_gene_markers(gbmAgg_log,genes,tsne_proj[c("TSNE.1","TSNE.2")],limits=c(0,0.05))
+
+#bottom6
+
+genes<-c("BASP1","TPO","HBE1","ANXA3","KISS1","MYO10")
+visualize_gene_markers(gbmAgg_log,genes,tsne_proj[c("TSNE.1","TSNE.2")],limits=c(0,0.05))
+
+#spcific small cluster
+tmp<-filter(clusterDiffExp,Cluster.8.Mean.UMI.Counts>0.01,Cluster.8.Adjusted.p.value<0.01)
+genes<-c("CHCHD5","WIF1","QRFPR","MIA","BTC","GNG2")
+visualize_gene_markers(gbmAgg_log,genes,tsne_proj[c("TSNE.1","TSNE.2")],limits=c(0,0.05))
+```
+
+S100A16 and SFTA1P are the more prevalent ones. the other ones seem to be outliers in a few cells. Moreover, SFTA1P seems to be specicic to the main RES6 cluster, while S100A16 is in both. Interestingly S100A16 has been associated with EMT in breast cancer and resistance to tamoxifen, Activating NOTCH1 pathway. SFTA1P is not well annotated. 
+
+
+genes<-c("BASP1","TPO","HBE1","ANXA3","KISS1","MYO10")
+visualize_gene_markers(gbmAgg_log,genes,tsne_proj[c("TSNE.1","TSNE.2")],limits=c(0,0.05))
+ANXA3 is the most specific to the small cluster. Annexin3 has been reported to ba higher expressed in reistant ovarian cancer cell lines. http://pubs.acs.org/doi/pdf/10.1021/pr060402r and http://cancerres.aacrjournals.org/content/70/4/1616.long
+
+# clone 14
+
+Now here are the 6 genes most enriched in clone 14 compared to all other cells. 
+```{r}
+tmp<-filter(clusterDiffExp,Cluster.4.Mean.UMI.Counts>0.01 | Cluster.9.Mean.UMI.Counts>0.01,Cluster.4.Adjusted.p.value<0.01 | Cluster.9.Adjusted.p.value<0.01, Cluster.9.Log2.fold.change>1 & Cluster.5.Log2.fold.change>1)
+
+#top6 luster9
+genes<-c("CA8","SPP1","SPAG17","TMEM221","SP5","MDFI")
+visualize_gene_markers(gbmAgg_log,genes,tsne_proj[c("TSNE.1","TSNE.2")],limits=c(0,0.05))
+
+#top6 cluster 5
+genes<-c("IGF2","FOLR2","MYH14","GATA5","NTS","RXRA")
+visualize_gene_markers(gbmAgg_log,genes,tsne_proj[c("TSNE.1","TSNE.2")],limits=c(0,0.05))
+
+
+#op6 both enriched
+tmp<-filter(clusterDiffExp,Cluster.4.Mean.UMI.Counts>0.01 | Cluster.9.Mean.UMI.Counts>0.01,Cluster.4.Adjusted.p.value<0.01 | Cluster.9.Adjusted.p.value<0.01, Cluster.9.Log2.fold.change>1 & Cluster.5.Log2.fold.change>1)
+genes<-c("APC2","DNM1","SLC26A1","ANKRD6","SGK223","DUSP15")
+visualize_gene_markers(gbmAgg_log,genes,tsne_proj[c("TSNE.1","TSNE.2")],limits=c(0,0.05))
+
+#downregulated
+tmp<-filter(clusterDiffExp,Cluster.4.Mean.UMI.Counts>0.01 | Cluster.9.Mean.UMI.Counts>0.01,Cluster.4.Adjusted.p.value<0.01 | Cluster.9.Adjusted.p.value<0.01)
+genes<-c("FGF1","RP11-849I19.1","MGLL","RANGRF","SALL3","VSTM1")
+visualize_gene_markers(gbmAgg_log,genes,tsne_proj[c("TSNE.1","TSNE.2")],limits=c(0,0.05))
+
+```
+
+#known cancer markers
+```{r}
+genes<-c("MKI67","CD24","CD44","PROM1","MYD88")
+visualize_gene_markers(gbmAgg_log,genes,tsne_proj[c("TSNE.1","TSNE.2")],limits=c(0,0.5))
+```
+
+# for the MCL meeting
+
+```{r}
+genes<-c("S100A16","BASP1","FGF1","ANXA3","SPDL1","SFTA1P")
+visualize_gene_markers(gbmAgg_log,genes,tsne_proj[c("TSNE.1","TSNE.2")],limits=c(0,0.5))
+
+```
+
+
+# specific genes
+
+```{r}
+genes<-c("SLFN11")
+visualize_gene_markers(gbmAgg_log,genes,tsne_proj[c("TSNE.1","TSNE.2")],limits=c(0,0.5))
+
+```
+
