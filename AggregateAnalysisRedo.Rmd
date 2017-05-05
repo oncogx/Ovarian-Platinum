@@ -1,0 +1,48 @@
+---
+title: "AggregateAnalysisRedo"
+author: "Massoud Maher"
+date: "5/4/2017"
+runtime: shiny
+output:
+  html_document: default
+  html_notebook: default
+---
+
+```{r}
+library(cellrangerRkit)
+```
+
+Load filtered gene expression matrix
+```{r}
+gbmAgg_path<-"/Volumes/oncogxA/Projects/CPTRES/RNAExpression/10x/10x_170206/CPTRES_agg"
+gbmAgg<-load_cellranger_matrix(gbmAgg_path)
+
+use_genes <- get_nonzero_genes(gbmAgg)
+gbmSub = gbmAgg[use_genes,]
+
+geneBC = as.data.frame(as.matrix(exprs(gbmSub)))
+geneBC = t(geneBC) # Transpose so columns are genes and rows are cells
+```
+
+Run PCA using same algorithm as Cell Ranger https://support.10xgenomics.com/single-cell/software/pipelines/latest/algorithms/overview
+```{r}
+library(irlba)
+
+pca = prcomp_irlba(geneBC, n = 10, scale. = TRUE)
+```
+
+Run PCA on transpose because not sure how input is taken
+```{r}
+pca_t = prcomp_irlba(t(geneBC), n=10, scale. = TRUE)
+```
+
+transpose pca shows scale values for barcodes whiel pca$scale shows scale values for genes. We want to scale each observation AKA cell to unit vector length so pca_t is what we want
+
+Run TSNE on pca results
+```{r}
+library(tsne)
+# This takes a while
+tsne = tsne(pca_t$x)
+```
+
+
