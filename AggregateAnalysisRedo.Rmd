@@ -9,40 +9,59 @@ output:
 ---
 
 ```{r}
+#install.packages(c("cellrangerRkit", "irlba","tsne"))
 library(cellrangerRkit)
 ```
 
 Load filtered gene expression matrix
 ```{r}
-gbmAgg_path<-"/Volumes/oncogxA/Projects/CPTRES/RNAExpression/10x/10x_170206/CPTRES_agg"
+gbmAgg_path<-"/Volumes/oncogxA/Projects/CPTRES/RNAExpression/10x/aggregates/10x_fullagg/10x_fullagg"
 gbmAgg<-load_cellranger_matrix(gbmAgg_path)
 
 use_genes <- get_nonzero_genes(gbmAgg)
 gbmSub = gbmAgg[use_genes,]
+gbmSub = gbmAgg
 
-geneBC = as.data.frame(as.matrix(exprs(gbmSub)))
+geneBCSub = as.data.frame(as.matrix(exprs(gbmSub)))
+geneBC = as.data.frame(as.matrix(exprs(gbmAgg)))
 geneBC = t(geneBC) # Transpose so columns are genes and rows are cells
+geneBCSub = t(geneBCSub) # Transpose so columns are genes and rows are cells
+
 ```
 
 Run PCA using same algorithm as Cell Ranger https://support.10xgenomics.com/single-cell/software/pipelines/latest/algorithms/overview
 ```{r}
 library(irlba)
 
+pca_filtered = prcomp_irlba(geneBCSub, n = 10, scale. = TRUE)
 pca = prcomp_irlba(geneBC, n = 10, scale. = TRUE)
 ```
 
-Run PCA on transpose because not sure how input is taken
+Compare manual PCA with cell ranger pca to verify that they are the same
 ```{r}
-pca_t = prcomp_irlba(t(geneBC), n=10, scale. = TRUE)
-```
+gbmAgg_results<-load_cellranger_analysis_results(gbmAgg_path)
+cellRanger_pca <- gbmAgg_results$pca
 
-transpose pca shows scale values for barcodes whiel pca$scale shows scale values for genes. We want to scale each observation AKA cell to unit vector length so pca_t is what we want
+
+```
 
 Run TSNE on pca results
 ```{r}
 library(tsne)
-# This takes a while
-tsne = tsne(pca_t$x)
+# This takes a while, running on subset
+#tsne_v = tsne(sample_n(as.data.frame(pca_t$x),1000))
+tsne_full = tsne(as.data.frame(pca_t$x))
+
+#library(ggplot2)
+#tsne = as.data.frame(tsne)
+#ggplot(data = tsne, aes(x=V1,y=V2)) + geom_point()
+```
+
+Plot covariance
+```{r}
+covar = cov(pca_t$x)
+require(lattice)
+levelplot(covar)
 ```
 
 
