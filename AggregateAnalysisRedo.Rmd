@@ -17,16 +17,14 @@ Load filtered gene expression matrix
 ```{r}
 gbmAgg_path<-"/Volumes/oncogxA/Projects/CPTRES/RNAExpression/10x/aggregates/10x_fullagg/10x_fullagg"
 gbmAgg<-load_cellranger_matrix(gbmAgg_path)
-
 use_genes <- get_nonzero_genes(gbmAgg)
 gbmSub = gbmAgg[use_genes,]
-gbmSub = gbmAgg
 
+#geneBC = as.data.frame(as.matrix(exprs(gbmAgg)))
 geneBCSub = as.data.frame(as.matrix(exprs(gbmSub)))
-geneBC = as.data.frame(as.matrix(exprs(gbmAgg)))
-geneBC = t(geneBC) # Transpose so columns are genes and rows are cells
-geneBCSub = t(geneBCSub) # Transpose so columns are genes and rows are cells
 
+#geneBC = t(geneBC) # Transpose so columns are genes and rows are cells
+geneBCSub = t(geneBCSub) # Transpose so columns are genes and rows are cells
 ```
 
 Run PCA using same algorithm as Cell Ranger https://support.10xgenomics.com/single-cell/software/pipelines/latest/algorithms/overview
@@ -34,15 +32,73 @@ Run PCA using same algorithm as Cell Ranger https://support.10xgenomics.com/sing
 library(irlba)
 
 pca_filtered = prcomp_irlba(geneBCSub, n = 10, scale. = TRUE)
-pca = prcomp_irlba(geneBC, n = 10, scale. = TRUE)
+pca_filtered_d = as.data.frame(pca_filtered$x)
+# pca = prcomp_irlba(geneBC, n = 10, scale. = TRUE) takes way too long
 ```
 
 Compare manual PCA with cell ranger pca to verify that they are the same
 ```{r}
 gbmAgg_results<-load_cellranger_analysis_results(gbmAgg_path)
 cellRanger_pca <- gbmAgg_results$pca
+```
+
+Combine into one dataframe to make plotting easier
+```{r}
+colnames(cellRanger_pca) = c("Barcode", colnames(pca_filtered$x))
+pca_filtered_d$set = "manual"
+cellRanger_pca$set = "cellRanger"
+filter_cell_comb = rbind(pca_filtered_d, cellRanger_pca[,2:12])
+```
 
 
+Plot PC1 and PC2 of each dataset to see if they are similar
+```{r}
+library(ggplot2)
+
+#p = ggplot() +
+#geom_point(data=as.data.frame(pca_filtered$x), aes(x = PC1, y = PC2), color = 'green') + 
+#geom_point(data=cellRanger_pca, aes(x = PC.1, y = PC.2), color = 'red') + 
+#theme(legend.position = "bottom") + ggtitle("PC1,2 for cellRanger, pca_filtered") + 
+#xlab("PC1") + ylab("PC2")
+p = ggplot(filter_cell_comb, aes(x = PC5, y = PC6)) + geom_point(aes(color=factor(set)))
+
+p
+```
+
+PC plots have much larger variance for manual data set, will try again, normalizing manally so each gene-expression vector is unit length
+```{r}
+geneBCSub_n = t(apply(geneBCSub, 1, function(x) x / sqrt(sum(x^2)) ))
+library(irlba)
+pca_filtered_n = prcomp_irlba(geneBCSub_n, n = 10)
+pca_filtered_d_n = as.data.frame(pca_filtered_n$x)
+
+colnames(cellRanger_pca) = c("Barcode", colnames(pca_filtered_d_n))
+pca_filtered_d_n$set = "manual"
+cellRanger_pca$set = "cellRanger"
+filter_cell_comb_n = rbind(pca_filtered_d_n, cellRanger_pca[,2:12])
+```
+
+```{r}
+# setup factor levels for plotting orde
+levels(filter_cell_comb_n$set) = c("cellRanger", "manual")
+p = ggplot(filter_cell_comb_n, aes(x = PC5, y = PC6)) + geom_point(aes(color=set), alpha = 0.1)
+p
+
+pm = ggplot(filter_cell_comb_n[filter_cell_comb_n$set == "manual",], aes(x = PC5, y = PC6)) + geom_point(aes(color=factor(set)))
+pm
+```
+
+Scatterplots have approximately same shape-- normalzing cellRanger PCA now
+```{r}
+cellRanger_pca_n = as.data.frame(t(apply(cellRanger_pca[,2:11], 1, function(x) x / sqrt(sum(x^2)) )))
+#cellRanger_pca_n$Barcode = cellRanger_pca$Barcode
+cellRanger_pca_n$set = cellRanger_pca$set
+
+
+filter_cell_comb_n_n = rbind(pca_filtered_d_n, cellRanger_pca_n[,1:11])
+levels(filter_cell_comb_n_n$set) = c("cellRanger", "manual")
+p = ggplot(filter_cell_comb_n_n, aes(x = PC5, y = PC6)) + geom_point(aes(color=set), alpha = 0.1)
+p
 ```
 
 Run TSNE on pca results
