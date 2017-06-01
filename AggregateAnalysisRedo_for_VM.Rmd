@@ -104,112 +104,15 @@ p
 Plots still do not look the same, using cellRanger's run_pca function
 ```{r}
 #pca_cellR_fn = run_pca(gbmSub) # CAUSED ERROR AND DIDNT WORK
-gbmAgg_path<-"/Volumes/oncogxA/Projects/CPTRES/RNAExpression/10x/aggregates/10x_fullagg/10x_fullagg"
-gbmAgg<-load_cellranger_matrix(gbmAgg_path)
 pca_cellR_fn = run_pca(gbmAgg)
 ```
 
-Doing it manually to debug
 ```{r}
-gbmSRS = gbmAgg[use_genes,]
-# Subset it so its less slow
-# mysample <- mydata[sample(1:nrow(mydata), 50, replace=FALSE),]
-gbmSRS = gbmSRS[sample(1:nrow(gbmSRS), 100, replace = FALSE),]
+pca_cellR_fn$x$set = "manual"
 
-gbmSRS_bcnorm <- normalize_barcode_sums_to_median(gbmSRS)
-
-
-gbmSRS_log <- log_gene_bc_matrix(gbmSRS_bcnorm)
-gbmSRS_mat = t(exprs(gbmSRS_log))
-gbmSRS_mat = gbmSRS_mat[1:100,]
-
-gbmSub_bcnorm <- normalize_barcode_sums_to_median(gbmSub)
-gbmSub_log <- log_gene_bc_matrix(gbmSub_bcnorm)
-gbmSub_mat <- t(exprs(gbmSub_log))
-gbmSub_mat_sub <- gbmSub_mat[1:100,]
-
-library(irlba)
-install.packages("devtools")
-library(devtools)
-install_github("bwlewis/irlba")
-sparse_pca <- function(x, n_pcs, mu=NULL, s=NULL, center_scale=TRUE) {
-  if (is.null(mu) && center_scale) mu <- colMeans(x)
-  if (is.null(s) && center_scale) s <- apply(x, 2, sd, na.rm=TRUE)
-
-  if (center_scale) {
-    s[s == 0] <- min(s[s > 0])
-    svd_res <- irlba::irlba(x, n_pcs, center=mu, scale=s)
-  } else {
-    svd_res <- irlba::irlba(x, n_pcs)
-  }
-
-  # compute explained variance
-  n <- dim(x)[1]
-  variance_sum <- sum(apply(x,2,var,na.rm=TRUE)/(s^2)) # sample variance sum
-  var_pcs <- svd_res$d^2/(n-1)/variance_sum
-
-  return(list(x=svd_res$u %*% diag(svd_res$d), rotation=svd_res$v, sdev=svd_res$d/sqrt(n-1),
-              tot_var=variance_sum, var_pcs=var_pcs))
-}
-
-gbmSRS_log_sub_t <- t(exprs(gbmSRS_log))[,1:11]
-
-pcaSub <- sparse_pca(gbmSub_mat + 0.0, 10)
-pcaFull <- sparse_pca(gbmSub_mat + 0.0, 10)
+filter_cell_comb_fn = rbind(pca_cellR_fn$x, cellRanger_pca[,2:12])
 ```
 
-Compare PCAs via plot
-```{r}
-pca_manual = pcaFull$x
-pca_manual = as.data.frame(pca_manual)
-pca_manual$set = "manual"
-colnames(pca_manual) = c("PC1","PC2","PC3","PC4","PC5","PC6", "PC7", "PC8","PC9","PC10", "set")
-
-cellRanger_pca$set = "cellRanger"
-colnames(cellRanger_pca) = c("Barcode", colnames(pca_manual))
-pca_both = rbind(pca_manual, cellRanger_pca[,2:12])
-
-colnames(pca_both) = c("PC1","PC2","PC3","PC4","PC5","PC6", "PC7", "PC8","PC9","PC10", "set")
-p = ggplot(pca_both, aes(x = PC5, y = PC6)) + geom_point(aes(color=set), alpha = 0.2)
-p
-```
-
-Transpose PC5 and PC6 and try again because it looks mirrored
-```{r}
-pca_manual_flip = pca_manual
-pca_manual_flip$PC5 = pca_manual_flip$PC5 * -1
-pca_manual_flip$PC1 = pca_manual_flip$PC1 * -1
-pca_manual_flip$PC8 = pca_manual_flip$PC8 * -1
-
-pca_both_flip = rbind(pca_manual_flip, cellRanger_pca[,2:12])
-p = ggplot(pca_both_flip, aes(x = PC8, y = PC1)) + geom_point(aes(color=set), alpha = 0.2)
-p
-```
-
-Negate certain columns because thats the pattern we found
-```{r}
-pca_manual_adj = pca_manual
-pca_manual_adj$PC1 = pca_manual_adj$PC1 * -1
-pca_manual_adj$PC3 = pca_manual_adj$PC3 * -1
-pca_manual_adj$PC4 = pca_manual_adj$PC4 * -1
-pca_manual_adj$PC5 = pca_manual_adj$PC5 * -1
-pca_manual_adj$PC8 = pca_manual_adj$PC8 * -1
-pca_manual_adj$PC9 = pca_manual_adj$PC9 * -1
-
-colnames(pca_manual_adj) = lapply(colnames(pca_manual_adj), function(x) paste(x, "_man", sep=""))
-pca_side = cbind(pca_manual_adj[,1:10],cellRanger_pca[,2:11])
-
-pca_side$edist = sqrt(sum((pca_side[,1:10] - pca_side[,11:20])^2))
-
-colnames(pca_manual_adj) = colnames(pca_manual_flip)
-pca_both_adj = rbind(pca_manual_adj, cellRanger_pca[,2:12])
-p = ggplot(pca_both_adj, aes(x = PC3, y = PC4)) + geom_point(aes(color=set), alpha = 0.2)
-p
-
-p1 = ggplot(pca_side, aes(x=edist)) + geom_histogram(binwidth = 0.001)
-p1
-#pca_manual_adj$norm_man =
-```
 
 Run TSNE on pca results
 ```{r}
